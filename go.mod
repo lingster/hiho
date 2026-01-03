@@ -12,4 +12,10 @@ require (
 	github.com/charmbracelet/bubbles v0.0.0
 	github.com/charmbracelet/bubbletea v0.0.0
 	github.com/charmbracelet/lipgloss v0.0.0
+	gopkg.in/yaml.v3 v3.0.1
+)
+
+require (
+	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/term v0.27.0 // indirect
 )

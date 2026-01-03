@@ -3,11 +3,11 @@ package tmux
 import (
 	"errors"
 	"fmt"
-	"math/rand"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
-	"time"
+	"sync/atomic"
 )
 
 // SessionManager describes tmux operations used by the TUI.
@@ -15,10 +15,12 @@ type SessionManager interface {
 	NewSession(cmd string) (Session, error)
 	Capture(name string) (string, error)
 	List() ([]Session, error)
+	ListHiho() ([]Session, error)
 	Switch(name string) (Session, error)
 	Next(current string) (Session, error)
 	Prev(current string) (Session, error)
 	Kill(name string) error
+	KillAllHiho() error
 }
 
 // Session represents a tmux session.
@@ -28,11 +30,9 @@ type Session struct {
 
 // Manager orchestrates tmux sessions.
 type Manager struct {
-	mu sync.Mutex
-}
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
+	mu      sync.Mutex
+	pid     int
+	counter int64
 }
 
 // ErrSessionNotFound indicates the requested session could not be located.
@@ -40,7 +40,9 @@ var ErrSessionNotFound = errors.New("session not found")
 
 // NewManager constructs a Manager.
 func NewManager() *Manager {
-	return &Manager{}
+	return &Manager{
+		pid: os.Getpid(),
+	}
 }
 
 // NewSession starts a detached tmux session and runs the provided command.
@@ -116,6 +118,39 @@ func (m *Manager) Kill(name string) error {
 	return nil
 }
 
+// ListHiho returns only tmux sessions with the hiho- prefix.
+func (m *Manager) ListHiho() ([]Session, error) {
+	sessions, err := m.List()
+	if err != nil {
+		return nil, err
+	}
+	var hihoSessions []Session
+	for _, session := range sessions {
+		if strings.HasPrefix(session.Name, "hiho-") {
+			hihoSessions = append(hihoSessions, session)
+		}
+	}
+	return hihoSessions, nil
+}
+
+// KillAllHiho terminates all sessions with the hiho- prefix.
+func (m *Manager) KillAllHiho() error {
+	sessions, err := m.ListHiho()
+	if err != nil {
+		return err
+	}
+	var errs []string
+	for _, session := range sessions {
+		if err := m.Kill(session.Name); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", session.Name, err))
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("failed to kill sessions: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
 func (m *Manager) selectRelative(current string, delta int) (Session, error) {
 	sessions, err := m.List()
 	if err != nil {
@@ -148,7 +183,6 @@ func (m *Manager) run(command string, args ...string) error {
 }
 
 func (m *Manager) uniqueName() string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return fmt.Sprintf("hiho-%d-%04d", time.Now().UnixNano(), rand.Intn(10000))
+	count := atomic.AddInt64(&m.counter, 1) - 1
+	return fmt.Sprintf("hiho-%d-%d", m.pid, count)
 }

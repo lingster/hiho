@@ -20,6 +20,11 @@ func (m *Model) Focus() {
 	m.focused = true
 }
 
+// Blur disables editing.
+func (m *Model) Blur() {
+	m.focused = false
+}
+
 // Update applies key messages.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	key, ok := msg.(tea.KeyMsg)
